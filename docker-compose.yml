@@ -1,0 +1,242 @@
+# This Docker Compose file defines a multi-service application setup for a Task Manager API.
+# It includes the following services:
+
+# 1. fastapi:
+#    - Runs the FastAPI application using Gunicorn with Uvicorn workers.
+#    - Exposes port 8000 for API access.
+#    - Depends on PostgreSQL and Redis services.
+#    - Includes a health check to ensure the service is running.
+
+# 2. postgres:
+#    - Provides a PostgreSQL database for the application.
+#    - Exposes port 5433 for database access.
+#    - Includes a health check to verify database readiness.
+
+# 3. nginx:
+#    - Acts as a reverse proxy for the FastAPI application.
+#    - Exposes port 80 for external access.
+#    - Uses a custom nginx.conf file for configuration.
+
+# 4. redis:
+#    - Provides a Redis instance for caching and message brokering.
+#    - Exposes port 6379 for Redis access.
+#    - Includes a health check to verify Redis readiness.
+
+# 5. celery:
+#    - Runs a Celery worker for background task processing.
+#    - Depends on Redis and the FastAPI application.
+#    - Includes a health check to ensure the Celery worker is operational.
+
+# 6. prometheus:
+#    - Provides a Prometheus server for monitoring and metrics collection.
+#    - Exposes port 9090 for Prometheus UI access.
+#    - Uses a custom prometheus.yml configuration file.
+#    - Includes a health check to verify Prometheus readiness.
+
+# 7. grafana:
+#    - Provides a Grafana instance for data visualization and monitoring dashboards.
+#    - Exposes port 3000 for Grafana UI access.
+#    - Depends on Prometheus for metrics data.
+#    - Includes a health check to ensure Grafana is operational.
+
+# 8. loki:
+#    - Provides a Loki instance for log aggregation and querying.
+#    - Exposes port 3100 for Loki access.
+#    - Uses a custom loki-config.yaml configuration file.
+#    - Includes a health check to verify Loki readiness.
+
+# 9. promtail:
+#    - Provides a Promtail instance for log collection and forwarding to Loki.
+#    - Uses a custom promtail-config.yaml configuration file.
+#    - Depends on Loki for log storage.
+
+# 10. prefect:
+#     - Runs a Prefect Orion server for workflow orchestration.
+#     - Exposes port 4200 for Prefect UI access.
+#     - Depends on PostgreSQL and Redis services.
+#     - Includes a health check to ensure the Prefect server is operational.
+
+# Volumes:
+# - postgres_data: Persistent storage for PostgreSQL data.
+# - redis_data: Persistent storage for Redis data.
+# - grafana_data: Persistent storage for Grafana data.
+# - prometheus_data: Persistent storage for Prometheus data.
+# - loki_data: Persistent storage for Loki data.
+
+# Each service is configured with restart policies and health checks to ensure reliability and proper startup order.
+services:
+  fastapi:
+    build: .
+    container_name: taskmanagerapi
+    expose:
+      - "8000"
+    volumes:
+      - .:/TASKMANAGERAPI
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5433/taskmanagerdb
+      - REDIS_URL=redis://default:XIjtaO8mItugGP0UNaaEG67Qv7gvpADP@redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    command: guncorn app.main:app --workers 3 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0:8000
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+  postgres:
+    image: postgres:latest
+    container_name: taskmanagerdb
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: taskmanagerdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+  nginx:
+    image: nginx:latest
+    container_name: taskmanagerapi_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./static-html-directory:/usr/share/nginx/html
+    depends_on:
+      - fastapi
+    restart: always
+  redis:
+    image: redis:latest
+    container_name: taskmanager_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taskmanagerapi_celery
+    command: celery -A app.celery worker --loglevel=info
+    volumes:
+      - .:/TASKMANAGERAPI
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5433/taskmanagerdb
+      - REDIS_URL=redis://default:XIjtaO8mItugGP0UNaaEG67Qv7gvpADP@redis:6379/0
+    depends_on:
+      - redis
+      - fastapi
+    healthcheck:
+      test: [ "CMD", "celery", "-A", "app.celery", "inspect", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: always
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_server
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--web.listen-address=:9090'
+      - '--web.external-url=http://localhost:9090'
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9090/-/healthy" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      - fastapi
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_ui
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3000/api/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+      - ./loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3100/ready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      - fastapi
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - ./promtail-config.yaml:/etc/promtail/config.yaml
+      - ./logs:/var/log
+    command: -config.file=/etc/promtail/config.yaml
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9080/ready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      - loki
+  prefect:
+    image: prefecthq/prefect:latest
+    command: prefect orion start
+    ports:
+      - "4200:4200"
+    volumes:
+      - .:/TASKMANAGERAPI
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5433/taskmanagerdb
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:4200/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  redis_data:
+  grafana_data:
+  prometheus_data:
+  loki_data:

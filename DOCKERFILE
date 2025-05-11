@@ -1,0 +1,35 @@
+# This Dockerfile is used to containerize a Python-based API application.
+#
+# Base Image:
+# - The image is based on the official Python 3.11 image.
+#
+# Working Directory:
+# - Sets the working directory inside the container to /TASKMANAGERAPI.
+#
+# Copy Files:
+# - Copies all files from the current directory on the host machine to the /TASKMANAGERAPI directory in the container.
+#
+# Install Dependencies:
+# - Installs the Python dependencies listed in the requirements.txt file using pip.
+# - The --no-cache-dir option ensures that pip does not cache the packages, reducing image size.
+#
+# Expose Port:
+# - Exposes port 8000 to allow external access to the application.
+#
+# Command:
+# - The container runs the application using either Uvicorn or Gunicorn as the ASGI server.
+# - The application entry point is specified as `main:app`.
+# - The server listens on all network interfaces (0.0.0.0) and uses port 8000.
+FROM python:3.11
+
+WORKDIR /TASKMANAGERAPI
+
+COPY . /TASKMANAGERAPI
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+EXPOSE 8000
+
+# Use Gunicorn with Uvicorn workers for better performance in production
+# (2 * number_of_cores) + 1
+CMD ["gunicorn", "main:app", "--workers", "17", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]

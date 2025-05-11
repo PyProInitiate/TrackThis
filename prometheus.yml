@@ -1,0 +1,76 @@
+# This is the Prometheus configuration file for monitoring various services.
+#
+# global:
+#   - Defines global settings for Prometheus, such as the default scrape interval.
+#     - scrape_interval: The default time interval between scrapes for all jobs (15 seconds here).
+#
+# scrape_configs:
+#   - A list of jobs that Prometheus will scrape metrics from.
+#
+#   - job_name: taskmanagerapi
+#     - Monitors the Task Manager API service.
+#     - scrape_interval: Overrides the global scrape interval to 5 seconds.
+#     - scrape_timeout: Sets the timeout for scraping to 5 seconds.
+#     - metrics_path: Specifies the endpoint for metrics (/metrics).
+#     - static_configs: Defines the target service (taskmanagerapi:8000).
+#
+#   - job_name: postgres
+#     - Monitors the PostgreSQL database.
+#     - scrape_interval, scrape_timeout, and metrics_path are configured similarly.
+#     - static_configs: Defines the target service (postgres:5433).
+#
+#   - job_name: redis
+#     - Monitors the Redis service.
+#     - static_configs: Defines the target service (redis:6379).
+#
+#   - job_name: worker
+#     - Monitors the worker service.
+#     - static_configs: Defines the target service (worker:8000).
+#
+#   - job_name: nginx
+#     - Monitors the Nginx web server.
+#     - static_configs: Defines the target service (nginx:80).
+#
+#   - job_name: prometheus
+#     - Monitors the Prometheus server itself.
+#     - static_configs: Defines the target service (prometheus_server:9090).
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: taskmanagerapi
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['taskmanagerapi:8000']
+  - job_name: postgres
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['postgres:5433']
+  - job_name: redis
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['redis:6379']
+  - job_name: worker
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['worker:8000']
+  - job_name: nginx
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['nginx:80']
+  - job_name: prometheus
+    scrape_interval: 5s
+    scrape_timeout: 5s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['prometheus_server:9090']
+
