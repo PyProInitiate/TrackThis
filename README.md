@@ -1,3 +1,10 @@
 # TrackThis
 ![PyProInitiate](https://github-readme-stats.vercel.app/api?username=PyProInitiate&showicons=true&theme=radical)
-T
+
+[INTRO]
+
+This is a task manager designed to help out people juggling multiple tasks
+
+[HOW TO]
+
+[ISSUES]

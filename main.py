@@ -27,13 +27,17 @@ sys.path.insert(0, "./main")
 sys.path.insert(0, "./polars_app")
 
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+SQLALCHEMY_DATABASE_URL = (
+    f"postgresql://postgres:{POSTGRES_PASSWORD}@db:5433/taskmanager"
+)
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
 load_dotenv(".venv")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 
 app = FastAPI()
 
@@ -45,8 +49,7 @@ r = redis.Redis(
     host="redis-17879.c90.us-east-1-3.ec2.redns.redis-cloud.com",
     port=17879,
     decode_responses=True,
-    username="default",
-    password="XIjtaO8mItugGP0UNaaEG67Qv7gvpADP",
+    password=REDIS_PASSWORD,
 )
 
 success = r.set("foo", "bar")
