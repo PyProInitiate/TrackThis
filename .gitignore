@@ -1,6 +1,6 @@
 __pycache__/
-.venv/*.pyd
+.venv/
 *.pyd
-#.venv/Lib/site-packages/connectorx/connectorx.cp311-win_amd64.pyd
-#.venv/Lib/site-packages/deltalake/_internal.pyd
-#.venv/Lib/site-packages/polars/polars.pyd
+.venv/Lib/site-packages/connectorx/connectorx.cp311-win_amd64.pyd
+.venv/Lib/site-packages/deltalake/_internal.pyd
+.venv/Lib/site-packages/polars/polars.pyd
