@@ -3,7 +3,7 @@
 
 [INTRO]
 
-This is a task manager designed to help out people juggling multiple tasks
+This is a task manager clone designed to help out people juggling multiple tasks
 
 [HOW TO]
 
