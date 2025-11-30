@@ -2,7 +2,7 @@
 ![PyProInitiate](https://github-readme-stats.vercel.app/api?username=PyProInitiate&showicons=true&theme=radical)
 
 [INTRO]
-This is a task manager clone designed to help out people juggling multiple tasks
+This is a task manager clone designed to mimic windows task manager of sorts
 
 [HOW TO]
 
@@ -17,3 +17,5 @@ Docker needs to be running in background(Needs WSL and virtualization in bios)
 You need POSTGRESQL
 
 [ISSUES]
+
+ARCHIVED DUE TO PROJECT SCOPE
