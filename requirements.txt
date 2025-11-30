@@ -1,11 +1,6 @@
-
-fastapi[standard]
-celery
-types-redis
-redis
-celery-types
+fastapi[all]
 uvicorn-worker
-uvicorn[standard]
+uvicorn[all]
 gunicorn
 pydantic
 ruff
@@ -28,3 +23,7 @@ httpx
 structlog
 importlib
 rich==13.7.1
+python==3.11
+starlette
+starlette_context
+sqlalchemy[asyncio]

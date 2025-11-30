@@ -17,16 +17,6 @@
 #    - Exposes port 80 for external access.
 #    - Uses a custom nginx.conf file for configuration.
 
-# 4. redis:
-#    - Provides a Redis instance for caching and message brokering.
-#    - Exposes port 6379 for Redis access.
-#    - Includes a health check to verify Redis readiness.
-
-# 5. celery:
-#    - Runs a Celery worker for background task processing.
-#    - Depends on Redis and the FastAPI application.
-#    - Includes a health check to ensure the Celery worker is operational.
-
 # 6. prometheus:
 #    - Provides a Prometheus server for monitoring and metrics collection.
 #    - Exposes port 9090 for Prometheus UI access.
@@ -58,7 +48,6 @@
 
 # Volumes:
 # - postgres_data: Persistent storage for PostgreSQL data.
-# - redis_data: Persistent storage for Redis data.
 # - grafana_data: Persistent storage for Grafana data.
 # - prometheus_data: Persistent storage for Prometheus data.
 # - loki_data: Persistent storage for Loki data.
@@ -74,10 +63,8 @@ services:
       - .:/TASKMANAGERAPI
     environment:
       - DATABASE_URL=postgresql://postgres:password@postgres:5433/taskmanagerdb
-      - REDIS_URL=redis://default:XIjtaO8mItugGP0UNaaEG67Qv7gvpADP@redis:6379/0
     depends_on:
       - postgres
-      - redis
     command: guncorn app.main:app --workers 3 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0:8000
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
@@ -112,40 +99,6 @@ services:
       - ./static-html-directory:/usr/share/nginx/html
     depends_on:
       - fastapi
-    restart: always
-  redis:
-    image: redis:latest
-    container_name: taskmanager_redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./redis:/data
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: always
-  celery:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: taskmanagerapi_celery
-    command: celery -A app.celery worker --loglevel=info
-    volumes:
-      - .:/TASKMANAGERAPI
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5433/taskmanagerdb
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_URL=redis://default:REDIS_PASSWORD@redis:6379/0
-    depends_on:
-      - redis
-      - fastapi
-    healthcheck:
-      test: [ "CMD", "celery", "-A", "app.celery", "inspect", "ping" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
     restart: always
   prometheus:
     image: prom/prometheus:latest
@@ -228,7 +181,6 @@ services:
       - DATABASE_URL=postgresql://postgres:password@postgres:5433/taskmanagerdb
     depends_on:
       - postgres
-      - redis
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:4200/health" ]
       interval: 10s
@@ -237,7 +189,6 @@ services:
     restart: unless-stopped
 volumes:
   postgres_data:
-  redis_data:
   grafana_data:
   prometheus_data:
   loki_data:

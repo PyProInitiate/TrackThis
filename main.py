@@ -1,63 +1,47 @@
+import asyncio
 import datetime
+import importlib
 import os
 import random
 import sys
 from uuid import uuid4
 
-import redis
-from dotenv import load_dotenv
-from fastapi import FastAPI
-from fastapi_sqlalchemy import DBSessionMiddleware, db
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from collections.abc import AsyncGenerator
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+#from starlette_context import context
+from starlette_context.middleware import RawContextMiddleware
 
-from models import Process as ProcessModel
-from schemas import Process as SchemaProcess
+from models import Base
 from utils import random_date, shuffle_files
 
-sys.path.insert(0, "./models")
-sys.path.insert(0, "./schemas")
-sys.path.insert(0, "./utils")
-sys.path.insert(0, "./database")
-sys.path.insert(0, "./celery_worker")
-sys.path.insert(0, "./__init__")
-sys.path.insert(0, "./main")
-sys.path.insert(0, "./polars_app")
+importlib.import_module("models.py")
 
-
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-SQLALCHEMY_DATABASE_URL = (
-    f"postgresql://postgres:{POSTGRES_PASSWORD}@db:5433/taskmanager"
-)
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-
-load_dotenv(".venv")
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+importlib.import_module("polars_app.py")
 
 app = FastAPI()
+SessionLocal: async_sessionmaker[AsyncSession] | None = None
 
-app.add_middleware(DBSessionMiddleware, db_url=SQLALCHEMY_DATABASE_URL)
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    if SessionLocal is None:
+        raise RuntimeError("SessionLocal is not initialized; call main() to initialize the engine")
+    async with SessionLocal() as session:
+        yield session
 
-# Initialize Redis connection
-# Ensure the Redis connection is established correctly
-r = redis.Redis(
-    host="redis-17879.c90.us-east-1-3.ec2.redns.redis-cloud.com",
-    port=17879,
-    decode_responses=True,
-    password=REDIS_PASSWORD,
-)
 
-success = r.set("foo", "bar")
-# True
 
-result = r.get("foo")
-print(result)
-# >>> bar
+async def async_main() -> None:
+    engine = create_async_engine(
+        "postgresql://postgres:{POSTGRES_PASSWORD}@db:5433/taskmanager",
+        connect_args={"check_same_thread": False},
+        execution_options={"isolation_level": "REPEATABLE READ"},
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    # insert @functions here
+    await engine.dispose()
+asyncio.run(async_main())
 
 
 class Process(BaseModel):
@@ -128,145 +112,30 @@ class Process(BaseModel):
     Network_task_size: int | None = Field(
         default_factory=lambda: random.randint(1, 100)
     )
+    orm_mode = True
+
+@app.post("/task", response_model=Process)
+async def create_task(session: AsyncSession = Depends(get_async_session)):
 
 
-@app.post("/tasks", response_model=Process)
-async def task(task: SchemaProcess) -> dict[str, str | int | bool | None]:
-    """Create a new task with the given data.
+@app.post("tasks/stop/{id}")
+async def run_task(id: str):
 
-    Parameters
-    ----------
-    task : Process
-        The process data to create a new task.
-
-    Returns
-    -------
-    dict[str, str | int | bool | None]
-        A dictionary containing the task ID and process data or an error
-        message if the task already exists.
-
-    """
-    cached_task = r.get(task.id)
-    if cached_task:
-        return {
-            "error": "Task already exists",
-            "status_code": 409,
-            "task_id": task.id,
-        }
-    # Check if the task already exists in the database
-    db_task = db.session.query(ProcessModel).filter_by(id=task.id).first()
-    if db_task:
-        return {
-            "error": "Task already exists",
-            "status_code": 409,
-            "task_id": task.id,
-        }
-    # Create a new task if it doesn't exist
-
-    """Create a new task with the given data.
-
-    Parameters
-    ----------
-    task : Process
-        The process data to create a new task.
-
-    Returns
-    -------
-    dict[str, str | int | bool | None]
-        A dictionary containing the task ID and process data.
-
-    """
-    db_task = ProcessModel(
-        id=task.id, name=task.name, description=task.description
-    )
-    db.session.add(db_task)
-    db.session.commit()  # Commit the changes to the database
-    db.session.refresh(db_task)  # Refresh the session to get the latest data
-    r.set(task.id, task.model_dump_json())  # Cache the task in Redis
-    return db_task
-    #
-
-
-@app.post("tasks/stop/{id}", response_model=Process)
-async def run_task(id: str) -> dict[str, str | int | bool | None]:
-    """Stop a task by its ID.
-
-    Parameters
-    ----------
-    id : str
-        The ID of the task to stop.
-
-    Returns
-    -------
-    dict[str, str | int | bool | None]
-        A dictionary containing the task ID and process data or an error
-        message if the task is not found.
-
-    """
-    task = r.get(id)
-    if task:
-        task_data = r.get(id)  # Retrieve the task data from Redis
-        if task_data:
-            task_dict = eval(task_data)  # Convert the string to a dictionary
-            r.shutdown(task_dict.get("id"))  # Use the "id" from the dictionary
-            return {"message": "Task stopped successfully", "task_id": id}
-    return {"error": "Task not found", "status_code": 404, "task_id": id}
 
 
 @app.get("/tasks")
-async def get_tasks() -> list[Process]:
-    """Retrieve a list of all tasks.
+async def get_tasks(session: AsyncSession = Depends(get_async_session)):
 
-    Returns
-    -------
-    list[Process]
-        A list of all process items.
 
-    """
-    r.get("tasks")
-    tasks: list[Process] = []
-    for key in r.scan_iter():
-        task_data = r.get(key)
-        if task_data:
-            task_dict = eval(task_data)
-            tasks.append(Process(**task_dict))
-    return tasks
 
 
 @app.get("/tasks/{id}")
-async def get_task(id: str) -> Process | None:
-    """Retrieve a task by its ID.
+async def get_task(session: AsyncSession = Depends(get_async_session)):
+    async with async__session() as session:
+        get_task_id = await async_session.get(Process.id)
 
-    Parameters
-    ----------
-    id : str
-        The ID of the task to retrieve.
 
-    Returns
-    -------
-    Process
-        The process item with the specified ID.
-
-    """
-    task_data = r.get(id)
-    return Process(**eval(task_data)) if task_data else None
 
 
 @app.put("/tasks/{id}", response_model=Process)
-async def tasks(tasks: SchemaProcess) -> dict[str, str | int | bool | None]:
-    """Update a task by its ID.
-
-    Parameters
-    ----------
-    id : str
-        The ID of the task to update.
-    tasks : Process
-        The updated process data.
-
-    Returns
-    -------
-    dict[str, str | int | bool | None]
-        A dictionary containing the updated task ID and process data.
-
-    """
-    return {"task_id": tasks.id, **tasks.model_dump()}
+async def tasks(session: AsyncSession = Depends(get_async_session)):
